@@ -1,0 +1,1435 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛡</text></svg>"
+    />
+    ← THÊM DÒNG NÀY
+    <title>SafeWeather – Hệ thống cảnh báo thời tiết</title>
+    <link rel="stylesheet" href="main.css" />
+    <!-- Leaflet: thử local trước, fallback CDN -->
+    <link
+      rel="stylesheet"
+      href="libs/leaflet.css"
+      onerror="
+        this.onerror = null;
+        this.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+      "
+    />
+    <script>
+      (function () {
+        var s = document.createElement("script");
+        s.src = "libs/leaflet.js";
+        s.onerror = function () {
+          var fb = document.createElement("script");
+          fb.src = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
+          document.head.appendChild(fb);
+        };
+        document.head.appendChild(s);
+      })();
+    </script>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;800;900&family=Exo+2:wght@300;400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <!-- Chart.js: thử local trước, fallback CDN -->
+    <script>
+      (function () {
+        var s = document.createElement("script");
+        s.src = "libs/chart.umd.min.js";
+        s.onerror = function () {
+          var fb = document.createElement("script");
+          fb.src =
+            "https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js";
+          document.head.appendChild(fb);
+        };
+        document.head.appendChild(s);
+      })();
+    </script>
+  </head>
+  <body>
+    <!-- EMERGENCY OVERLAY -->
+    <div id="emergency-overlay" class="emergency-overlay hidden">
+      <div class="emergency-box">
+        <div class="emergency-icon">⚠</div>
+        <h2 id="emergency-title">CẢNH BÁO THỜI TIẾT NGUY HIỂM</h2>
+        <p id="emergency-msg">Khu vực của bạn đang có thời tiết cực đoan.</p>
+        <div class="emergency-actions">
+          <button onclick="openSurvivalFromAlert()" class="btn-emergency-guide">
+            🚨 Xem hướng dẫn sinh tồn
+          </button>
+          <button onclick="closeEmergency()" class="btn-emergency-close">
+            ✕ Đóng
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- SURVIVAL MODAL -->
+    <div id="survival-modal" class="survival-modal hidden">
+      <div class="survival-modal-content">
+        <button class="modal-close" onclick="closeSurvivalModal()">✕</button>
+        <h2>🆘 Hướng dẫn Sinh tồn</h2>
+        <div class="survival-tabs">
+          <button class="stab active" onclick="showSurvivalGuide('bao', this)">
+            🌀 Bão
+          </button>
+          <button class="stab" onclick="showSurvivalGuide('lu', this)">
+            🌊 Lũ
+          </button>
+          <button class="stab" onclick="showSurvivalGuide('set', this)">
+            ⚡ Sét
+          </button>
+          <button class="stab" onclick="showSurvivalGuide('dongdat', this)">
+            🌍 Động đất
+          </button>
+          <button class="stab" onclick="showSurvivalGuide('nangnong', this)">
+            🔥 Nắng nóng
+          </button>
+        </div>
+        <div id="survival-content" class="survival-guide-content"></div>
+      </div>
+    </div>
+
+    <!-- HEADER -->
+    <header class="site-header">
+      <div class="header-inner">
+        <div class="logo">
+          <span class="logo-icon">🛡</span>
+          <span class="logo-text"
+            >Safe<span class="logo-accent">Weather</span></span
+          >
+        </div>
+        <nav class="main-nav">
+          <button
+            class="nav-btn active"
+            data-tab="dashboard"
+            onclick="switchTab('dashboard', this)"
+          >
+            <span class="nav-icon">🌡</span><span>Dashboard</span>
+          </button>
+          <button
+            class="nav-btn"
+            data-tab="forecast"
+            onclick="switchTab('forecast', this)"
+          >
+            <span class="nav-icon">📅</span><span>Dự báo</span>
+          </button>
+          <button
+            class="nav-btn"
+            data-tab="map"
+            onclick="switchTab('map', this)"
+          >
+            <span class="nav-icon">🗺</span><span>Bản đồ</span>
+          </button>
+          <button
+            class="nav-btn"
+            data-tab="alerts"
+            onclick="switchTab('alerts', this)"
+          >
+            <span class="nav-icon">🔔</span><span>Cảnh báo</span
+            ><span id="alert-badge" class="badge hidden">!</span>
+          </button>
+          <button
+            class="nav-btn"
+            data-tab="survival"
+            onclick="switchTab('survival', this)"
+          >
+            <span class="nav-icon">🆘</span><span>Sinh tồn</span>
+          </button>
+          <button
+            class="nav-btn"
+            data-tab="family"
+            onclick="switchTab('family', this)"
+          >
+            <span class="nav-icon">👨‍👩‍👧</span><span>Gia đình</span>
+          </button>
+        </nav>
+        <div class="header-right">
+          <div class="live-clock" id="live-clock">--:--:--</div>
+          <div class="location-badge">
+            <span>📍</span><span id="city-name">Đang xác định...</span>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <main class="main-content">
+      <!-- ========== DASHBOARD ========== -->
+      <section id="tab-dashboard" class="tab-section active">
+        <div class="status-bar">
+          <div class="status-item" id="status-safety">
+            <span class="status-dot safe"></span
+            ><span>Trạng thái: An toàn</span>
+          </div>
+          <div class="status-item">
+            <span>🕐</span><span id="last-update">Chưa cập nhật</span>
+          </div>
+          <div class="status-item dual-source-badge">
+            <span class="pulse-dot"></span><span>Dual API Active</span>
+          </div>
+          <button class="btn-refresh" onclick="fetchWeather()">
+            ↻ Làm mới
+          </button>
+        </div>
+        <div class="db-row1">
+          <div class="db-left">
+            <div class="card weather-main-card">
+              <div class="card-header">Thời tiết hiện tại</div>
+              <div class="weather-main-body">
+                <div class="weather-icon-big" id="weather-icon-big">🌤</div>
+                <div class="weather-desc" id="weather-desc">Đang tải...</div>
+                <div class="temp-display">
+                  <span id="temp-main">--</span
+                  ><span class="temp-unit">°C</span>
+                </div>
+                <div class="feels-like">
+                  Cảm giác như <span id="feels-like">--</span>°C
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="db-right">
+            <div class="windy-card card">
+              <div class="windy-header">
+                <div class="windy-title">
+                  <svg
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    style="flex-shrink: 0"
+                  >
+                    <path
+                      d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"
+                      fill="#00d4ff"
+                      opacity=".2"
+                    />
+                    <path
+                      d="M12 6c-3.31 0-6 2.69-6 6s2.69 6 6 6 6-2.69 6-6-2.69-6-6-6zm-1 9l-3-3 1.41-1.41L11 12.17l4.59-4.58L17 9l-6 6z"
+                      fill="#00d4ff"
+                    />
+                  </svg>
+                  <span
+                    >Bản đồ thời tiết
+                    <strong style="color: #00d4ff">Windy</strong></span
+                  >
+                  <span class="windy-live-dot"></span
+                  ><span class="windy-live-text">LIVE</span>
+                </div>
+                <div class="windy-layers">
+                  <button
+                    class="wlayer active"
+                    data-overlay="wind"
+                    onclick="switchWindyLayer('wind', this)"
+                  >
+                    💨 Gió
+                  </button>
+                  <button
+                    class="wlayer"
+                    data-overlay="rain"
+                    onclick="switchWindyLayer('rain', this)"
+                  >
+                    🌧 Mưa
+                  </button>
+                  <button
+                    class="wlayer"
+                    data-overlay="temp"
+                    onclick="switchWindyLayer('temp', this)"
+                  >
+                    🌡 Nhiệt
+                  </button>
+                  <button
+                    class="wlayer"
+                    data-overlay="clouds"
+                    onclick="switchWindyLayer('clouds', this)"
+                  >
+                    ☁ Mây
+                  </button>
+                  <button
+                    class="wlayer"
+                    data-overlay="pressure"
+                    onclick="switchWindyLayer('pressure', this)"
+                  >
+                    📊 Áp suất
+                  </button>
+                  <button
+                    class="wlayer"
+                    data-overlay="thunderstorms"
+                    onclick="switchWindyLayer('thunderstorms', this)"
+                  >
+                    ⚡ Dông
+                  </button>
+                </div>
+              </div>
+              <div class="windy-frame-wrap">
+                <iframe
+                  id="windy-iframe"
+                  src="https://embed.windy.com/embed2.html?lat=16.0&lon=107.5&detailLat=21.03&detailLon=105.85&width=900&height=520&zoom=5&level=surface&overlay=wind&product=ecmwf&menu=&message=true&marker=true&calendar=now&pressure=true&type=map&location=coordinates&detail=false&metricWind=km%2Fh&metricTemp=%C2%B0C&radarRange=-1"
+                  frameborder="0"
+                  allowfullscreen
+                  loading="lazy"
+                  title="Windy Live Weather Map"
+                >
+                </iframe>
+                <div class="windy-layer-badge" id="windy-layer-label">
+                  💨 Gió
+                </div>
+                <div class="windy-loading" id="windy-loading">
+                  <div class="windy-loading-inner">
+                    <div class="windy-spinner"></div>
+                    <div>Đang tải bản đồ Windy...</div>
+                  </div>
+                </div>
+              </div>
+              <div class="windy-footer">
+                <div class="windy-footer-left">
+                  <span>📡 Mô hình: <strong>ECMWF</strong></span>
+                  <span class="wf-sep">·</span>
+                  <span>🔄 Cập nhật: <strong>mỗi 6 giờ</strong></span>
+                  <span class="wf-sep">·</span>
+                  <span>📍 <span id="windy-coord-display">Việt Nam</span></span>
+                </div>
+                <div class="windy-footer-right">
+                  <button onclick="closeWindyDetail()" class="btn-close-detail">
+                    ✕ Đóng chi tiết
+                  </button>
+                  <button
+                    onclick="locateMe()"
+                    class="btn-locate-me"
+                    id="btn-locate-me"
+                  >
+                    <span class="locate-icon">📍</span
+                    ><span>Vị trí của tôi</span>
+                  </button>
+                  <a
+                    href="https://windy.com"
+                    target="_blank"
+                    class="windy-open-btn"
+                    >↗ Mở Windy</a
+                  >
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="stats-row">
+          <div class="card stat-card">
+            <div class="stat-top">
+              <span class="stat-icon-new">💧</span
+              ><span class="stat-label">Độ ẩm</span>
+            </div>
+            <div class="stat-value" id="humidity">--%</div>
+            <div class="stat-bar">
+              <div
+                class="stat-bar-fill"
+                id="humidity-bar"
+                style="width: 0%"
+              ></div>
+            </div>
+          </div>
+          <div class="card stat-card">
+            <div class="stat-top">
+              <span class="stat-icon-new">🌬</span
+              ><span class="stat-label">Tốc độ gió</span>
+            </div>
+            <div class="stat-value" id="wind-speed">-- km/h</div>
+            <div class="stat-sub" id="wind-dir">Hướng: --</div>
+          </div>
+          <div class="card stat-card">
+            <div class="stat-top">
+              <span class="stat-icon-new">👁</span
+              ><span class="stat-label">Tầm nhìn</span>
+            </div>
+            <div class="stat-value" id="visibility">-- km</div>
+            <div class="stat-sub">Tầm nhìn xa</div>
+          </div>
+          <div class="card stat-card">
+            <div class="stat-top">
+              <span class="stat-icon-new">🌡</span
+              ><span class="stat-label">Áp suất</span>
+            </div>
+            <div class="stat-value" id="pressure">-- hPa</div>
+            <div class="stat-sub">Khí quyển</div>
+          </div>
+          <div class="card stat-card">
+            <div class="stat-top">
+              <span class="stat-icon-new">🌅</span
+              ><span class="stat-label">Bình minh</span>
+            </div>
+            <div class="stat-value" id="sunrise">--:--</div>
+            <div class="stat-sub">Mặt trời mọc</div>
+          </div>
+          <div class="card stat-card">
+            <div class="stat-top">
+              <span class="stat-icon-new">🌇</span
+              ><span class="stat-label">Hoàng hôn</span>
+            </div>
+            <div class="stat-value" id="sunset">--:--</div>
+            <div class="stat-sub">Mặt trời lặn</div>
+          </div>
+        </div>
+
+        <div class="db-row2">
+          <div class="card alert-panel" id="alert-panel">
+            <div class="card-header">⚡ Cảnh báo hiện tại</div>
+            <div id="alert-list">
+              <div class="no-alert">
+                ✅ Không có cảnh báo nào — Thời tiết an toàn
+              </div>
+            </div>
+          </div>
+          <div class="card my-status-card">
+            <div class="card-header">📡 Cập nhật trạng thái của tôi</div>
+            <div class="status-buttons">
+              <button
+                class="status-btn safe-btn"
+                onclick="updateMyStatus('safe')"
+              >
+                <span>✅</span> Tôi an toàn
+              </button>
+              <button
+                class="status-btn danger-btn"
+                onclick="updateMyStatus('danger')"
+              >
+                <span>🚨</span> Đang gặp nguy hiểm
+              </button>
+              <button
+                class="status-btn help-btn"
+                onclick="updateMyStatus('help')"
+              >
+                <span>🆘</span> Tôi cần trợ giúp
+              </button>
+            </div>
+            <div id="my-status-display" class="my-status-display">
+              <span class="status-dot safe"></span> Trạng thái: Chưa cập nhật
+            </div>
+          </div>
+        </div>
+
+        <div class="quick-survival">
+          <div class="quick-title">🚨 Hướng dẫn khẩn cấp nhanh</div>
+          <div class="quick-buttons">
+            <button onclick="quickSurvival('bao')" class="qbtn">🌀 Bão</button>
+            <button onclick="quickSurvival('lu')" class="qbtn">
+              🌊 Lũ lụt
+            </button>
+            <button onclick="quickSurvival('set')" class="qbtn">⚡ Sét</button>
+            <button onclick="quickSurvival('dongdat')" class="qbtn">
+              🌍 Động đất
+            </button>
+            <button onclick="quickSurvival('nangnong')" class="qbtn">
+              🔥 Nắng nóng
+            </button>
+          </div>
+        </div>
+      </section>
+      <!-- ========== FORECAST ========== -->
+      <section id="tab-forecast" class="tab-section hidden">
+        <div class="fc-header">
+          <div class="fc-title">
+            <span>📅</span><span>Dự báo thời tiết</span>
+          </div>
+          <div class="fc-meta">
+            <span class="fc-source-badge">📡 Open-Meteo + OWM</span
+            ><span class="fc-updated" id="fc-updated-time">--</span>
+          </div>
+        </div>
+        <div class="fc-row1">
+          <div class="card fc-chart-card">
+            <div class="fc-card-header">
+              <span>📈 Biểu đồ 24 giờ tới</span>
+              <div class="fc-chart-tabs">
+                <button
+                  class="fc-ctab active"
+                  onclick="switchChartType('line', this)"
+                >
+                  Đường</button
+                ><button class="fc-ctab" onclick="switchChartType('bar', this)">
+                  Cột
+                </button>
+              </div>
+            </div>
+            <div class="fc-chart-wrap"><canvas id="hourly-chart"></canvas></div>
+          </div>
+          <div class="card fc-today-card">
+            <div class="fc-card-header">☀️ Hôm nay</div>
+            <div class="fc-today-body">
+              <div class="fc-today-top">
+                <div class="fc-today-icon" id="fc-today-icon">🌤</div>
+                <div class="fc-today-desc" id="fc-today-desc">--</div>
+              </div>
+              <div class="fc-now-block">
+                <span class="fc-now-val" id="fc-now-temp-val">--</span
+                ><span class="fc-now-unit">°C</span
+                ><span class="fc-now-tag">Hiện tại</span>
+              </div>
+              <div class="fc-divider"></div>
+              <div class="fc-minmax-row">
+                <div class="fc-minmax-item">
+                  <span class="fc-minmax-label">🔴 Cao nhất</span
+                  ><span class="fc-minmax-val hot" id="fc-today-max">--°</span>
+                </div>
+                <div class="fc-minmax-sep"></div>
+                <div class="fc-minmax-item">
+                  <span class="fc-minmax-label">🔵 Thấp nhất</span
+                  ><span class="fc-minmax-val cold" id="fc-today-min">--°</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="card fc-hourly-card">
+          <div class="fc-card-header">⏱ Từng giờ</div>
+          <div id="hourly-list" class="fc-hourly-scroll"></div>
+        </div>
+        <div class="card fc-daily-card">
+          <div class="fc-card-header">📆 Dự báo 8 ngày</div>
+          <div id="forecast-table" class="fc-daily-grid">
+            <div class="forecast-loading">⏳ Đang tải...</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ========== MAP ========== -->
+      <section id="tab-map" class="tab-section hidden">
+        <div class="map-page-header">
+          <div class="map-page-title">
+            <span>🛰</span><span>Bản đồ thời tiết & Vị trí</span>
+          </div>
+          <div class="map-page-meta">
+            <span class="map-coord-badge" id="map-coord-badge"
+              >📍 Chưa xác định vị trí</span
+            >
+          </div>
+        </div>
+        <div class="map-layout">
+          <div class="map-side-panel">
+            <div class="card map-info-card">
+              <div class="map-info-header">📍 Vị trí của tôi</div>
+              <div class="map-my-location">
+                <div class="map-loc-icon">🏠</div>
+                <div class="map-loc-body">
+                  <div class="map-loc-road" id="map-loc-road">
+                    Đang xác định...
+                  </div>
+                  <div class="map-loc-district" id="map-loc-district">--</div>
+                  <div class="map-loc-coords" id="map-loc-coords">---, ---</div>
+                </div>
+              </div>
+              <button onclick="centerMap()" class="btn-map-locate">
+                <span>📍</span> Về vị trí của tôi
+              </button>
+            </div>
+            <div class="card map-info-card">
+              <div class="map-info-header">🗂 Lớp bản đồ</div>
+              <div class="map-layer-btns">
+                <button
+                  class="map-layer-btn active"
+                  onclick="
+                    changeBaseLayer('osm');
+                    setActiveLayerBtn(this);
+                  "
+                >
+                  <span>🗺</span> OpenStreetMap
+                </button>
+                <button
+                  class="map-layer-btn"
+                  onclick="
+                    changeBaseLayer('satellite');
+                    setActiveLayerBtn(this);
+                  "
+                >
+                  <span>🛰</span> Vệ tinh
+                </button>
+                <button
+                  class="map-layer-btn"
+                  onclick="
+                    changeBaseLayer('topo');
+                    setActiveLayerBtn(this);
+                  "
+                >
+                  <span>⛰</span> Địa hình
+                </button>
+              </div>
+              <div class="map-weather-toggle">
+                <span class="map-wt-label">Lớp mưa thời tiết</span>
+                <button
+                  onclick="toggleWeatherLayer()"
+                  class="map-wt-btn"
+                  id="layer-toggle"
+                >
+                  <span class="map-wt-dot off" id="weather-dot"></span
+                  ><span id="layer-toggle-text">Tắt</span>
+                </button>
+              </div>
+            </div>
+            <div class="card map-info-card">
+              <div class="map-info-header">📌 Chú giải</div>
+              <div class="map-legend-new">
+                <div class="map-leg-item">
+                  <span class="map-leg-dot pulse-blue"></span
+                  ><span>Vị trí của tôi</span>
+                </div>
+                <div class="map-leg-item">
+                  <span class="map-leg-dot green"></span
+                  ><span>Thành viên gia đình</span>
+                </div>
+                <div class="map-leg-item">
+                  <span class="map-leg-dot red"></span
+                  ><span>Vùng nguy hiểm</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="map-main">
+            <div
+              id="leaflet-map"
+              class="leaflet-map-new"
+              style="height: 580px"
+            ></div>
+            <div class="map-zoom-hint">Cuộn để phóng to · Kéo để di chuyển</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ========== ALERTS ========== -->
+      <section id="tab-alerts" class="tab-section hidden">
+        <div class="section-title">🔔 Hệ thống cảnh báo</div>
+        <div class="alert-level-card card">
+          <div class="card-header">Mức độ cảnh báo hiện tại</div>
+          <div class="alert-levels">
+            <div class="level-item level-green active-level" id="level-safe">
+              <div class="level-icon">🟢</div>
+              <div>AN TOÀN</div>
+            </div>
+            <div class="level-item level-yellow" id="level-caution">
+              <div class="level-icon">🟡</div>
+              <div>CHÚ Ý</div>
+            </div>
+            <div class="level-item level-orange" id="level-warning">
+              <div class="level-icon">🟠</div>
+              <div>CẢNH BÁO</div>
+            </div>
+            <div class="level-item level-red" id="level-danger">
+              <div class="level-icon">🔴</div>
+              <div>NGUY HIỂM</div>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header">📋 Nhật ký cảnh báo</div>
+          <div id="alert-log" class="alert-log">
+            <div class="no-alert">✅ Hệ thống đang theo dõi...</div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header">⚙ Cài đặt thông báo</div>
+          <div class="notif-settings">
+            <label class="toggle-label"
+              ><input type="checkbox" id="notif-push" checked /><span
+                class="toggle"
+              ></span
+              ><span>Push Notification</span></label
+            >
+            <label class="toggle-label"
+              ><input type="checkbox" id="notif-sound" checked /><span
+                class="toggle"
+              ></span
+              ><span>Âm thanh cảnh báo</span></label
+            >
+            <label class="toggle-label"
+              ><input type="checkbox" id="notif-email" /><span
+                class="toggle"
+              ></span
+              ><span>Thông báo Email</span></label
+            >
+            <div class="threshold-setting">
+              <label
+                >Ngưỡng cảnh báo gió (km/h):
+                <strong id="wind-threshold-val">50</strong></label
+              >
+              <input
+                type="range"
+                min="20"
+                max="150"
+                value="50"
+                id="wind-threshold"
+                oninput="
+                  document.getElementById('wind-threshold-val').textContent =
+                    this.value
+                "
+              />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ========== SURVIVAL ========== -->
+      <section id="tab-survival" class="tab-section hidden">
+        <div class="section-title">🆘 Hướng dẫn sinh tồn</div>
+        <!-- 🎮 SURVIVAL RANK HUB -->
+        <div class="survival-rank-hub" id="survival-rank-hub">
+          <div
+            class="srh-rank-card"
+            style="border-color: rgba(0, 212, 255, 0.2)"
+          >
+            <div class="srh-rank-left">
+              <div class="srh-skin">🧗</div>
+              <div>
+                <div class="srh-rank-title" style="color: #7a9cc0">
+                  🥉 Rookie Climber
+                </div>
+                <div class="srh-xp-row">
+                  <div class="srh-xp-bar">
+                    <div
+                      class="srh-xp-fill"
+                      style="width: 0%; background: #7a9cc0"
+                    ></div>
+                  </div>
+                  <span class="srh-xp-text">0 XP · còn 200 XP lên rank</span>
+                </div>
+              </div>
+            </div>
+            <div class="srh-right">
+              <div class="srh-streak">🗓 <strong>0</strong> ngày</div>
+              <div class="srh-items-mini">
+                <span title="Shield">🛡1</span>
+                <span title="Freeze">⏸1</span>
+                <span title="50/50">💡1</span>
+              </div>
+            </div>
+          </div>
+          <button class="srh-play-btn" onclick="startQuizGame()">
+            <span>🏔</span> Leo Núi Sinh Tồn — Quiz thực chiến
+            <span class="srh-best"
+              >80 câu · 6 thiên tai · Có items & rank!</span
+            >
+          </button>
+        </div>
+        <div class="survival-grid">
+          <div class="card survival-card" onclick="quickSurvival('bao')">
+            <div class="survival-card-icon">🌀</div>
+            <div class="survival-card-title">Bão</div>
+            <div class="survival-card-desc">Cách tồn tại khi bão đổ bộ.</div>
+            <button class="btn-see-guide">Xem hướng dẫn →</button>
+          </div>
+          <div class="card survival-card" onclick="quickSurvival('lu')">
+            <div class="survival-card-icon">🌊</div>
+            <div class="survival-card-title">Lũ lụt</div>
+            <div class="survival-card-desc">
+              Di chuyển an toàn, tránh vùng nước chảy mạnh.
+            </div>
+            <button class="btn-see-guide">Xem hướng dẫn →</button>
+          </div>
+          <div class="card survival-card" onclick="quickSurvival('set')">
+            <div class="survival-card-icon">⚡</div>
+            <div class="survival-card-title">Sét đánh</div>
+            <div class="survival-card-desc">
+              Phòng tránh sét khi đi ngoài trời.
+            </div>
+            <button class="btn-see-guide">Xem hướng dẫn →</button>
+          </div>
+          <div class="card survival-card" onclick="quickSurvival('dongdat')">
+            <div class="survival-card-icon">🌍</div>
+            <div class="survival-card-title">Động đất</div>
+            <div class="survival-card-desc">DROP – COVER – HOLD ON.</div>
+            <button class="btn-see-guide">Xem hướng dẫn →</button>
+          </div>
+          <div class="card survival-card" onclick="quickSurvival('nangnong')">
+            <div class="survival-card-icon">🔥</div>
+            <div class="survival-card-title">Nắng nóng</div>
+            <div class="survival-card-desc">
+              Phòng tránh say nắng, mất nước.
+            </div>
+            <button class="btn-see-guide">Xem hướng dẫn →</button>
+          </div>
+          <div class="card survival-card" onclick="quickSurvival('mualon')">
+            <div class="survival-card-icon">🌧</div>
+            <div class="survival-card-title">Mưa lớn</div>
+            <div class="survival-card-desc">
+              Xử lý khi mưa lớn, sạt lở và ngập úng.
+            </div>
+            <button class="btn-see-guide">Xem hướng dẫn →</button>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header">🎒 Checklist túi đồ khẩn cấp</div>
+          <div class="checklist">
+            <label class="check-item"
+              ><input type="checkbox" /><span
+                >💧 Nước uống (ít nhất 3 lít/người/ngày)</span
+              ></label
+            >
+            <label class="check-item"
+              ><input type="checkbox" /><span
+                >🍱 Thức ăn khô dự trữ (3 ngày)</span
+              ></label
+            >
+            <label class="check-item"
+              ><input type="checkbox" /><span
+                >🔦 Đèn pin + pin dự phòng</span
+              ></label
+            >
+            <label class="check-item"
+              ><input type="checkbox" /><span>🏥 Hộp thuốc cấp cứu</span></label
+            >
+            <label class="check-item"
+              ><input type="checkbox" /><span>📻 Radio chạy pin</span></label
+            >
+            <label class="check-item"
+              ><input type="checkbox" /><span
+                >📱 Sạc dự phòng điện thoại</span
+              ></label
+            >
+            <label class="check-item"
+              ><input type="checkbox" /><span
+                >🗝 Giấy tờ tùy thân (bọc nilon)</span
+              ></label
+            >
+            <label class="check-item"
+              ><input type="checkbox" /><span
+                >💊 Thuốc cá nhân (đủ cho 7 ngày)</span
+              ></label
+            >
+            <label class="check-item"
+              ><input type="checkbox" /><span
+                >🧰 Dao đa năng, dây thừng</span
+              ></label
+            >
+            <label class="check-item"
+              ><input type="checkbox" /><span
+                >📞 Danh sách số điện thoại khẩn cấp</span
+              ></label
+            >
+          </div>
+          <div class="checklist-progress">
+            <div class="progress-bar">
+              <div
+                class="progress-fill"
+                id="checklist-fill"
+                style="width: 0%"
+              ></div>
+            </div>
+            <span id="checklist-count">0/10 hoàn thành</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================================================================
+     CHAT SYSTEM — Professional Messenger + Group Chat
+     ================================================================ -->
+
+      <!-- Floating Button -->
+      <button
+        class="chat-fab hidden"
+        id="chat-fab"
+        onclick="toggleChatWindow()"
+        title="Tin nhắn"
+      >
+        💬
+        <span class="chat-fab-badge hidden" id="chat-total-badge">0</span>
+      </button>
+
+      <!-- Chat Window -->
+      <div class="chat-window hidden" id="chat-window">
+        <!-- VIEW 1: Conversation List -->
+        <div class="chat-view" id="chat-view-list">
+          <div class="chat-header">
+            <div class="chat-list-title" style="padding: 0; margin: 0">
+              💬 Tin nhắn
+            </div>
+            <div style="flex: 1"></div>
+            <button
+              class="chat-header-btn"
+              onclick="showCreateGroup()"
+              title="Tạo nhóm"
+              style="font-size: 0.8rem; padding: 4px 8px; width: auto; gap: 4px"
+            >
+              <span>👥</span><span style="font-size: 0.72rem">Nhóm mới</span>
+            </button>
+            <button
+              class="chat-header-btn"
+              onclick="toggleChatWindow()"
+              title="Đóng"
+              style="margin-left: 4px"
+            >
+              ✕
+            </button>
+          </div>
+
+          <!-- Tabs: Cá nhân / Nhóm -->
+          <div class="chat-tabs">
+            <button
+              class="chat-tab active"
+              id="tab-dm"
+              onclick="switchChatTab('dm')"
+            >
+              💬 Cá nhân
+            </button>
+            <button
+              class="chat-tab"
+              id="tab-grp"
+              onclick="switchChatTab('group')"
+            >
+              👥 Nhóm
+              <span class="chat-tab-badge hidden" id="group-invite-badge"
+                >0</span
+              >
+            </button>
+          </div>
+
+          <!-- DM List -->
+          <div class="chat-conv-list" id="chat-conv-list">
+            <div class="chat-conv-empty">
+              <div style="font-size: 2rem; margin-bottom: 8px">💬</div>
+              <div>Kết bạn để nhắn tin</div>
+            </div>
+          </div>
+
+          <!-- Group List -->
+          <div class="chat-conv-list hidden" id="chat-group-list">
+            <div class="chat-conv-empty">
+              <div style="font-size: 2rem; margin-bottom: 8px">👥</div>
+              <div>Chưa có nhóm nào</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- VIEW 2: Create Group -->
+        <div class="chat-view hidden" id="chat-view-create-group">
+          <div class="chat-header">
+            <button class="chat-header-back" onclick="showChatList()">‹</button>
+            <div
+              style="
+                font-weight: 700;
+                font-size: 0.92rem;
+                color: var(--text-primary);
+              "
+            >
+              👥 Tạo nhóm mới
+            </div>
+            <div style="flex: 1"></div>
+            <button class="chat-header-btn" onclick="toggleChatWindow()">
+              ✕
+            </button>
+          </div>
+          <div
+            style="
+              padding: 16px;
+              display: flex;
+              flex-direction: column;
+              gap: 12px;
+              flex: 1;
+              overflow-y: auto;
+            "
+          >
+            <!-- Tên nhóm -->
+            <div>
+              <div
+                style="
+                  font-size: 0.72rem;
+                  text-transform: uppercase;
+                  letter-spacing: 1.5px;
+                  color: var(--text-muted);
+                  margin-bottom: 6px;
+                "
+              >
+                Tên nhóm
+              </div>
+              <div style="display: flex; gap: 8px; align-items: center">
+                <button
+                  id="grp-emoji-btn"
+                  onclick="toggleGrpEmoji()"
+                  style="
+                    font-size: 1.6rem;
+                    background: var(--bg-card2);
+                    border: 1px solid var(--border);
+                    border-radius: 10px;
+                    width: 44px;
+                    height: 44px;
+                    cursor: pointer;
+                    flex-shrink: 0;
+                  "
+                >
+                  🌟
+                </button>
+                <input
+                  id="grp-name-input"
+                  class="chat-input"
+                  style="
+                    background: var(--bg-card2);
+                    border: 1px solid var(--border);
+                    border-radius: 10px;
+                    padding: 10px 14px;
+                    flex: 1;
+                  "
+                  placeholder="Tên nhóm của bạn..."
+                />
+              </div>
+              <div
+                class="chat-emoji-grid"
+                id="grp-emoji-grid"
+                style="
+                  margin-top: 8px;
+                  border: 1px solid var(--border);
+                  border-radius: 10px;
+                "
+              >
+                <button onclick="setGrpEmoji('🌟')">🌟</button
+                ><button onclick="setGrpEmoji('🛡')">🛡</button>
+                <button onclick="setGrpEmoji('🏠')">🏠</button
+                ><button onclick="setGrpEmoji('❤️')">❤️</button>
+                <button onclick="setGrpEmoji('🔥')">🔥</button
+                ><button onclick="setGrpEmoji('⚡')">⚡</button>
+                <button onclick="setGrpEmoji('🌍')">🌍</button
+                ><button onclick="setGrpEmoji('🎯')">🎯</button>
+                <button onclick="setGrpEmoji('💎')">💎</button
+                ><button onclick="setGrpEmoji('🚀')">🚀</button>
+              </div>
+            </div>
+            <!-- Mời bạn bè -->
+            <div>
+              <div
+                style="
+                  font-size: 0.72rem;
+                  text-transform: uppercase;
+                  letter-spacing: 1.5px;
+                  color: var(--text-muted);
+                  margin-bottom: 8px;
+                "
+              >
+                Thêm thành viên
+              </div>
+              <div id="grp-friend-select"></div>
+            </div>
+            <button
+              onclick="createGroup()"
+              class="btn-fb-share start"
+              style="
+                width: 100%;
+                padding: 12px;
+                font-size: 0.9rem;
+                margin-top: auto;
+              "
+            >
+              ✅ Tạo nhóm
+            </button>
+          </div>
+        </div>
+
+        <!-- VIEW 3: Group Invites -->
+        <div class="chat-view hidden" id="chat-view-group-invites">
+          <div class="chat-header">
+            <button class="chat-header-back" onclick="showChatList()">‹</button>
+            <div style="font-weight: 700; font-size: 0.92rem">
+              📬 Lời mời vào nhóm
+            </div>
+            <div style="flex: 1"></div>
+            <button class="chat-header-btn" onclick="toggleChatWindow()">
+              ✕
+            </button>
+          </div>
+          <div class="chat-conv-list" id="group-invites-list"></div>
+        </div>
+
+        <!-- VIEW 4: Chat Conversation (DM & Group) -->
+        <div class="chat-view hidden" id="chat-view-convo">
+          <div class="chat-header">
+            <button class="chat-header-back" onclick="showChatList()">‹</button>
+            <div class="chat-header-avatar" id="chat-h-avatar">😊</div>
+            <div class="chat-header-info">
+              <div class="chat-header-name" id="chat-h-name">--</div>
+              <div class="chat-header-sub" id="chat-h-sub">⚫ Offline</div>
+            </div>
+            <div class="chat-header-btns">
+              <button
+                class="chat-header-btn"
+                id="chat-btn-map"
+                onclick="chatGoMap()"
+                title="Xem bản đồ"
+              >
+                🗺
+              </button>
+              <button
+                class="chat-header-btn"
+                id="chat-btn-members"
+                onclick="showGroupMembers()"
+                title="Thành viên"
+                style="display: none"
+              >
+                👥
+              </button>
+              <button class="chat-header-btn" onclick="toggleChatWindow()">
+                ✕
+              </button>
+            </div>
+          </div>
+
+          <div class="chat-messages" id="chat-messages"></div>
+
+          <div class="chat-emoji-grid" id="chat-emoji-grid">
+            <button onclick="chatEmoji('❤️')">❤️</button
+            ><button onclick="chatEmoji('😊')">😊</button>
+            <button onclick="chatEmoji('😂')">😂</button
+            ><button onclick="chatEmoji('😢')">😢</button>
+            <button onclick="chatEmoji('😡')">😡</button
+            ><button onclick="chatEmoji('👍')">👍</button>
+            <button onclick="chatEmoji('👎')">👎</button
+            ><button onclick="chatEmoji('🙏')">🙏</button>
+            <button onclick="chatEmoji('🔥')">🔥</button
+            ><button onclick="chatEmoji('⚠️')">⚠️</button>
+            <button onclick="chatEmoji('🆘')">🆘</button
+            ><button onclick="chatEmoji('📍')">📍</button>
+            <button onclick="chatEmoji('✅')">✅</button
+            ><button onclick="chatEmoji('❌')">❌</button>
+          </div>
+
+          <div class="chat-input-area">
+            <div class="chat-input-row">
+              <button class="chat-emoji-toggle" onclick="toggleChatEmoji()">
+                😊
+              </button>
+              <input
+                type="text"
+                class="chat-input"
+                id="chat-input"
+                placeholder="Nhắn tin..."
+                oninput="chatInputChange()"
+                onkeydown="
+                  if (event.key === 'Enter' && !event.shiftKey) {
+                    event.preventDefault();
+                    chatSend();
+                  }
+                "
+              />
+              <button class="chat-send" id="chat-send-btn" onclick="chatSend()">
+                ➤
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- VIEW 5: Group Members -->
+        <div class="chat-view hidden" id="chat-view-members">
+          <div class="chat-header">
+            <button class="chat-header-back" onclick="showGroupChat()">
+              ‹
+            </button>
+            <div class="chat-header-info">
+              <div class="chat-header-name" id="grp-members-title">
+                👥 Thành viên
+              </div>
+              <div class="chat-header-sub" id="grp-members-sub"></div>
+            </div>
+            <div style="flex: 1"></div>
+            <button class="chat-header-btn" onclick="toggleChatWindow()">
+              ✕
+            </button>
+          </div>
+
+          <!-- Thông tin nhóm + đổi tên -->
+          <div class="grp-info-bar" id="grp-info-bar">
+            <div class="grp-info-avatar" id="grp-info-avatar">👥</div>
+            <div class="grp-info-body">
+              <div class="grp-info-name" id="grp-info-name">--</div>
+              <div class="grp-info-role" id="grp-info-role"></div>
+            </div>
+            <button
+              class="grp-rename-btn"
+              onclick="showRenameGroup()"
+              title="Đổi tên nhóm"
+            >
+              ✏
+            </button>
+          </div>
+
+          <!-- Form đổi tên (ẩn mặc định) -->
+          <div class="grp-rename-form hidden" id="grp-rename-form">
+            <div class="grp-rename-row">
+              <button
+                id="grp-rename-emoji-btn"
+                onclick="toggleRenameEmoji()"
+                class="grp-emoji-pick"
+              >
+                👥
+              </button>
+              <input
+                id="grp-rename-input"
+                class="chat-input"
+                style="
+                  flex: 1;
+                  background: var(--bg-card2);
+                  border: 1px solid rgba(0, 212, 255, 0.3);
+                  border-radius: 10px;
+                  padding: 8px 12px;
+                "
+                placeholder="Tên nhóm mới..."
+              />
+              <button onclick="submitRenameGroup()" class="grp-rename-save">
+                ✓
+              </button>
+              <button onclick="cancelRenameGroup()" class="grp-rename-cancel">
+                ✕
+              </button>
+            </div>
+            <div
+              class="chat-emoji-grid"
+              id="grp-rename-emoji-grid"
+              style="
+                border: 1px solid var(--border);
+                border-radius: 10px;
+                margin-top: 6px;
+              "
+            >
+              <button onclick="setRenameEmoji('🌟')">🌟</button
+              ><button onclick="setRenameEmoji('🛡')">🛡</button>
+              <button onclick="setRenameEmoji('🏠')">🏠</button
+              ><button onclick="setRenameEmoji('❤️')">❤️</button>
+              <button onclick="setRenameEmoji('🔥')">🔥</button
+              ><button onclick="setRenameEmoji('⚡')">⚡</button>
+              <button onclick="setRenameEmoji('🌍')">🌍</button
+              ><button onclick="setRenameEmoji('🎯')">🎯</button>
+              <button onclick="setRenameEmoji('💎')">💎</button
+              ><button onclick="setRenameEmoji('🚀')">🚀</button>
+              <button onclick="setRenameEmoji('👥')">👥</button
+              ><button onclick="setRenameEmoji('🌈')">🌈</button>
+            </div>
+          </div>
+
+          <!-- Danh sách thành viên -->
+          <div class="grp-section-label">Thành viên</div>
+          <div
+            class="chat-conv-list"
+            id="group-members-list"
+            style="flex: 1"
+          ></div>
+
+          <!-- Mời thêm -->
+          <div class="grp-invite-section" id="grp-invite-section">
+            <div class="grp-section-label">Mời thêm bạn bè</div>
+            <div id="grp-invite-more-list"></div>
+          </div>
+
+          <!-- Rời nhóm -->
+          <div
+            style="
+              padding: 10px 12px;
+              border-top: 1px solid var(--border);
+              flex-shrink: 0;
+            "
+          >
+            <button class="grp-leave-btn" onclick="leaveGroup()">
+              🚪 Rời khỏi nhóm
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ========== FAMILY ========== -->
+      <section id="tab-family" class="tab-section hidden">
+        <div class="section-title">👨‍👩‍👧 Mạng lưới gia đình</div>
+
+        <!-- PROFILE CỦA TÔI -->
+        <div class="card fb-profile-card">
+          <div class="fb-profile-left">
+            <div class="fb-avatar" id="my-emoji">😊</div>
+            <div class="fb-profile-info">
+              <div class="fb-name-row">
+                <span id="fb-my-name">Người dùng SafeWeather</span>
+                <button
+                  class="fb-edit-name"
+                  onclick="fbEditName()"
+                  title="Đổi tên"
+                >
+                  ✏
+                </button>
+              </div>
+              <div class="fb-id-row">
+                <span class="fb-id-label">Friend ID</span>
+                <span class="fb-id-value" id="my-friend-id-box">SW-......</span>
+                <button class="fb-id-copy" onclick="copyMyId()" title="Copy ID">
+                  📋
+                </button>
+              </div>
+              <div id="fb-status" class="fb-status-text">
+                <span class="fb-dot connecting"></span> Đang kết nối...
+              </div>
+              <div class="fb-id-hint">Chia sẻ ID này để kết bạn</div>
+            </div>
+          </div>
+          <div class="fb-sharing-right">
+            <button
+              onclick="startSharing()"
+              class="btn-fb-share start"
+              id="btn-share-start"
+            >
+              📡 Chia sẻ vị trí
+            </button>
+            <button
+              onclick="stopSharing()"
+              class="btn-fb-share stop hidden"
+              id="btn-share-stop"
+            >
+              ⛔ Dừng chia sẻ
+            </button>
+          </div>
+        </div>
+
+        <!-- THÊM BẠN -->
+        <div class="card">
+          <div class="card-header">➕ Thêm bạn bè</div>
+          <div class="fb-add-friend">
+            <input
+              type="text"
+              id="add-friend-input"
+              placeholder="Nhập Friend ID (VD: SW-X4K9M2)"
+              class="fb-input"
+              onkeydown="if (event.key === 'Enter') fbSendRequest();"
+            />
+            <button class="fb-add-btn" onclick="fbSendRequest()">Gửi →</button>
+          </div>
+          <div id="add-friend-msg" class="fb-msg"></div>
+        </div>
+
+        <!-- LỜI MỜI ĐẾN -->
+        <div class="card" id="card-pending" style="display: none">
+          <div class="card-header">
+            📬 Lời mời kết bạn
+            <span class="fr-badge" id="pending-badge"></span>
+          </div>
+          <div id="friend-requests-pending"></div>
+        </div>
+
+        <!-- ĐÃ GỬI -->
+        <div class="card" id="card-sent" style="display: none">
+          <div class="card-header">📤 Đã gửi lời mời</div>
+          <div id="friend-requests-sent"></div>
+        </div>
+
+        <!-- DANH SÁCH BẠN BÈ -->
+        <div class="card">
+          <div class="card-header">
+            👥 Bạn bè
+            <span class="fr-count" id="friends-count">0</span>
+          </div>
+          <div class="family-grid" id="friends-accepted"></div>
+        </div>
+
+        <!-- SỐ KHẨN CẤP -->
+        <div class="card">
+          <div class="card-header">📞 Số điện thoại khẩn cấp</div>
+          <div class="emergency-numbers">
+            <div class="emg-num">
+              <span class="emg-icon">🚒</span
+              ><span class="emg-name">Cứu hỏa</span
+              ><a href="tel:114" class="emg-tel">114</a>
+            </div>
+            <div class="emg-num">
+              <span class="emg-icon">🚑</span
+              ><span class="emg-name">Cứu thương</span
+              ><a href="tel:115" class="emg-tel">115</a>
+            </div>
+            <div class="emg-num">
+              <span class="emg-icon">👮</span
+              ><span class="emg-name">Công an</span
+              ><a href="tel:113" class="emg-tel">113</a>
+            </div>
+            <div class="emg-num">
+              <span class="emg-icon">⛑</span><span class="emg-name">Cứu hộ</span
+              ><a href="tel:1800599928" class="emg-tel">1800 599 928</a>
+            </div>
+            <div class="emg-num">
+              <span class="emg-icon">🏥</span><span class="emg-name">Y tế</span
+              ><a href="tel:19001119" class="emg-tel">1900 1119</a>
+            </div>
+          </div>
+        </div>
+      </section>
+      <!-- QUIZ GAME MODAL v2.0 -->
+      <div id="quiz-modal" class="quiz-overlay hidden">
+        <div class="quiz-container">
+          <div id="qscreen-hub" class="qscreen">
+            <div class="qhub-header">
+              <button class="qhub-header-btn" onclick="closeQuizModal()">
+                ✕
+              </button>
+              <div class="qhub-header-title">🏔 SURVIVAL MOUNTAIN</div>
+              <button class="qhub-header-btn" onclick="showQuizLeaderboard()">
+                🏆
+              </button>
+            </div>
+            <div class="qhub-scroll">
+              <div id="qhub-rank"></div>
+              <div class="qhub-section-label">Chọn ngọn núi để chinh phục</div>
+              <div class="qhub-topics-grid" id="qhub-topics"></div>
+            </div>
+            <div class="qhub-items-bar" id="qhub-items"></div>
+          </div>
+          <div id="qscreen-game" class="qscreen hidden"></div>
+          <div id="qscreen-result" class="qscreen hidden"></div>
+          <div
+            id="qscreen-lb"
+            class="qscreen hidden"
+            style="overflow-y: auto"
+          ></div>
+        </div>
+      </div>
+
+      <!-- SHARE CARD MODAL -->
+      <div id="share-card-modal" class="quiz-overlay hidden">
+        <div class="share-card-container">
+          <div
+            style="
+              font-family: var(--font-display);
+              font-size: 0.8rem;
+              color: var(--accent-cyan);
+              letter-spacing: 2px;
+              text-align: center;
+              margin-bottom: 4px;
+            "
+          >
+            📸 KẾT QUẢ CỦA BẠN
+          </div>
+          <canvas
+            id="share-canvas"
+            style="
+              max-width: 100%;
+              border-radius: 10px;
+              border: 1px solid rgba(0, 212, 255, 0.2);
+            "
+          ></canvas>
+          <div class="share-actions">
+            <button class="share-dl-btn" onclick="downloadShareCard()">
+              ⬇ Tải xuống
+            </button>
+            <button class="share-close-btn" onclick="closeShareModal()">
+              ✕ Đóng
+            </button>
+          </div>
+        </div>
+      </div>
+    </main>
+    <footer class="site-footer">
+      <div>
+        🛡 SafeWeather – Hệ thống cảnh báo thời tiết &amp; hướng dẫn sinh tồn
+      </div>
+      <div>
+        Dữ liệu từ OpenWeatherMap &amp; Open-Meteo · Bản đồ OpenStreetMap · Cập
+        nhật mỗi 5 phút
+      </div>
+    </footer>
+
+    <!-- main.js dùng ES Module (Firebase tích hợp bên trong) -->
+    <script type="module" src="main.js"></script>
+  </body>
+</html>
